@@ -1,0 +1,1465 @@
+%=============================================================
+%  Auditing Label- and Group-Conditional Coverage for Student Dropout Prediction
+%  A Class-Conditional Conformal Prediction Approach
+%
+%  Rimsha Bibi, M. Umair Shahzad
+%  Department of Mathematics, University of Okara, Pakistan
+%
+%  ------------------------------------------------------------
+%  HOW TO COMPILE
+%  ------------------------------------------------------------
+%  Upload this .tex file and the two Figure4 PNG files together.
+%  The existing figures are drawn using pgfplots; the new
+%  Figure 4A and Figure 4B are supplied as separate PNG files.
+%
+%  Overleaf: New Project > Blank Project, paste this whole file
+%  into main.tex, and Recompile. Engine: pdfLaTeX.
+%  The first compile is slower because the plots are drawn.
+%
+%  ------------------------------------------------------------
+%  JOURNAL FORMATTING
+%  ------------------------------------------------------------
+%  This file uses the plain `article' class on purpose, so it
+%  compiles under a plain article template.
+%  Format for a journal only AFTER the journal is chosen:
+%  copy everything between \begin{document} and \end{document}
+%  into that publisher's template. Nothing in the body below
+%  depends on the article class.
+%
+%  ------------------------------------------------------------
+%  BEFORE SUBMISSION
+%  ------------------------------------------------------------
+%  Confirm every entry in the bibliography against the
+%  publisher's own page: volume, issue, year, page range.
+%=============================================================
+\documentclass[11pt,a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb,amsthm}
+\usepackage{booktabs}
+\usepackage{graphicx}
+\usepackage{caption}
+\usepackage{subcaption}
+\usepackage{siunitx}
+\usepackage{tikz}
+\usepackage{pgfplots}
+\pgfplotsset{compat=1.18}
+
+% figure palette -- checked for colour-blind separation
+\definecolor{fblue}{HTML}{2A78D6}
+\definecolor{forange}{HTML}{EB6834}
+\definecolor{faqua}{HTML}{1BAF7A}
+\definecolor{fgrey}{HTML}{8C8C86}
+\definecolor{fdim}{HTML}{9AA4AE}
+
+\usepackage[colorlinks=true,linkcolor=black,citecolor=black,urlcolor=blue]{hyperref}
+
+% --- float placement: keeps figures/tables from leaving large gaps ---
+\renewcommand{\topfraction}{0.9}
+\renewcommand{\bottomfraction}{0.8}
+\renewcommand{\textfraction}{0.07}
+\renewcommand{\floatpagefraction}{0.75}
+\setcounter{topnumber}{3}
+\setcounter{bottomnumber}{2}
+\setcounter{totalnumber}{5}
+
+\theoremstyle{plain}
+\newtheorem{theorem}{Theorem}
+\newtheorem{lemma}[theorem]{Lemma}
+\theoremstyle{definition}
+\newtheorem{definition}[theorem]{Definition}
+\theoremstyle{remark}
+\newtheorem{remark}[theorem]{Remark}
+
+\newcommand{\Prob}{\mathbb{P}}
+\newcommand{\Ind}{\mathbf{1}}
+\newcommand{\Yset}{\mathcal{Y}}
+\newcommand{\qhat}{\hat{q}}
+\newcommand{\pihat}{\hat{\pi}}
+
+\title{\bfseries Auditing Label- and Group-Conditional Coverage in Three-Class Student Outcome Prediction}
+
+\author{%
+Rimsha Bibi \\
+\small Department of Mathematics, University of Okara, Okara, Pakistan \\
+\small \texttt{rimsharao000@gmail.com}
+\and
+Dr. M. Umair Shahzad\thanks{Corresponding author: \texttt{mushahzad@uo.edu.pk}} \\
+\small Department of Mathematics, University of Okara, Okara, Pakistan
+}
+% SUBMISSION CHECK: confirm applicable ethics policy and add repository URL and DOI after deposit. Check target journal declaration requirements.
+\date{}
+
+\begin{document}
+\maketitle
+
+%=============================================================
+\begin{abstract}
+We investigate whether near-nominal marginal conformal coverage masks
+uneven uncertainty across student outcomes in the 4,424-record UCI student
+attrition benchmark. A random-forest classifier was evaluated using 100
+stratified training, calibration, and test partitions at 90\% nominal
+coverage. Standard split conformal prediction achieved 90.25\% mean
+marginal coverage but only 71.73\% for students labelled \textsf{Enrolled};
+the latter fell below 90\% in every partition. Label-Mondrian conformal
+prediction raised \textsf{Enrolled} coverage to 90.27\%, increasing mean
+prediction-set size from 1.427 to 1.606 labels. A further audit of five
+student attributes identified disparities within outcome--group cells:
+for \textsf{Enrolled} scholarship holders, mean coverage increased from
+60.79\% under split conformal prediction to 91.46\% under group-by-label
+calibration. Small calibration cells sometimes produced large, less
+informative sets. Results were examined under alternative classifiers,
+feature subsets, calibration sizes, and score constructions. In a
+100-partition matched automatic-decision comparison, Mondrian singleton
+predictions had 90.72\% accuracy, below the 93.32\% obtained by selecting
+an equal number of high-confidence predictions using maximum model
+probability. These results indicate that educational prediction systems
+should report marginal, outcome-conditional, and subgroup coverage
+alongside prediction-set size and matched selection performance, rather
+than rely on a single aggregate coverage statistic.
+\end{abstract}
+
+\noindent\textbf{Keywords:} conformal prediction; class-conditional coverage;
+Mondrian conformal prediction; student dropout; educational data mining;
+distribution-free uncertainty quantification; selective prediction
+
+\vspace{1em}
+
+%=============================================================
+\section{Introduction}
+
+Student dropout is among the most consequential and most studied outcomes in
+higher education. It carries a direct cost to the student, a financial cost to
+the institution, and a measurable social cost, and the prospect of identifying
+at-risk students early enough for intervention has made it one of the standard
+proving grounds of educational data mining. A large literature now reports
+classifiers that predict, from administrative and first-year academic records,
+whether a student will withdraw, remain enrolled, or graduate.
+
+That literature is mature on the question of predictive accuracy. On the
+Portalegre cohort in particular---4{,}424 students at a Portuguese polytechnic,
+released publicly by Realinho et al.~\cite{realinho2022} and now a common
+benchmark---recent work reports carefully validated results. Gu and
+Zhang~\cite{gu2026} compare eight classifiers with SHAP-based interpretability
+and report a macro-AUC of 0.891 with a 95\% confidence interval of
+$[0.876, 0.902]$. Guamán-Hidalgo and Enciso~\cite{guaman2026} study student outcome
+prediction using a three-class formulation; their reported performance is not
+directly comparable without matched preprocessing, model selection, and splits. Elmasry et
+al.~\cite{elmasry2026} go further and attach split conformal prediction to the
+same data, reporting that the conformal layer ``achieves empirical coverage
+close to the desired confidence level, ensuring reliable uncertainty
+estimates''.
+
+The studies quantify different things, and the distinction matters. A
+confidence interval on an AUC, as in~\cite{gu2026}, is a statement about a
+population parameter: it says how precisely the model's average discriminative
+ability has been estimated across the cohort. It says nothing about any
+individual student. Conformal prediction, as in~\cite{elmasry2026}, does supply
+a per-student object---a set of labels containing the truth with a stated
+probability---but the guarantee attached to that object is \emph{marginal}:
+\begin{equation}
+\Prob\big(Y \in C(X)\big) \;\ge\; 1-\alpha ,
+\label{eq:marginal-intro}
+\end{equation}
+where the probability averages over the independent calibration sample and the future test pair $(X,Y)$ (conditional on the fitted predictor). What an advisor
+implicitly assumes on being told that a prediction set is ``90\% reliable'' is
+the stronger, conditional statement
+\begin{equation}
+\Prob\big(Y \in C(X) \,\big|\, Y = c\big) \;\ge\; 1-\alpha
+\qquad \text{for each outcome } c ,
+\label{eq:conditional-intro}
+\end{equation}
+and \eqref{eq:marginal-intro} does not imply \eqref{eq:conditional-intro}. The
+common marginal threshold need not meet the nominal coverage target in every
+outcome class, as the present empirical audit demonstrates.
+
+This study measures, on the Portalegre cohort, the previously established
+failure of marginal coverage to ensure class-conditional coverage
+\cite{ding2023,lofstrom2015}. It is a benchmark-specific audit, not a new
+conformal validity theorem.
+
+To our knowledge, this is the first combined class- and group-by-label
+conformal coverage audit on this specific student-outcome benchmark to
+include an equally sized, matched maximum-probability selection baseline.
+The contribution is the empirical reporting protocol rather than a new
+validity result.
+
+Our empirical contributions are:
+\begin{enumerate}
+\item A 100-partition class-wise coverage audit showing that standard split CP
+      undercovers \textsf{Enrolled} in 100/100 partitions (mean 71.73\%).
+\item A comparison with Mondrian CP, whose 100-partition class-wise mean
+      coverages are 90.59\%, 90.27\% and 90.33\%, together with set-size costs.
+\item A five-attribute group and group-by-label coverage audit, plus a
+      transparently labelled two-cluster score-distribution adaptation.
+\item Fixed-training calibration-size and within-training hyperparameter
+      tuning studies, alongside score, model and feature-availability checks.
+\item A matched-auto-decision comparison showing that ordinary maximum
+      probability outperforms Mondrian singleton decisions on this dataset;
+      no conditional risk guarantee is claimed for singletons.
+\end{enumerate}
+
+
+The remainder of the paper is organised as follows.
+Section~\ref{sec:related} places the work against the dropout-prediction and
+conformal-prediction literatures. Section~\ref{sec:prelim} states the conformal
+framework and proves the two coverage results we rely on.
+Section~\ref{sec:methods} describes the data and the experimental protocol.
+Section~\ref{sec:results} presents the results, and Section~\ref{sec:discussion}
+discusses their implications and limitations.
+
+%=============================================================
+\section{Related Work}\label{sec:related}
+
+\subsection{Dropout prediction and educational data mining}
+
+Institutional research on student attrition long predates its machine-learning
+treatment. Tinto's integration model~\cite{tinto1975} framed departure as the
+outcome of a student's academic and social integration, and supplied the
+variables---prior attainment, financial circumstance, first-year
+performance---that still dominate feature sets today. The move to predictive
+modelling began with the educational data mining programme surveyed by Baker
+and Yacef~\cite{baker2009} and updated by Romero and
+Ventura~\cite{romero2020}; early applications to attrition, such as Kotsiantis
+et al.~\cite{kotsiantis2003} on distance learning, established the template of
+supervised classification from administrative records that the field has
+followed since.
+
+Work on the Portalegre cohort used here begins with Martins et
+al.~\cite{martins2021}, who assembled the records and reported an initial
+classification study, and with the data descriptor of Realinho et
+al.~\cite{realinho2022} that placed the data in the public domain. Recent
+studies on this cohort are methodologically careful. Gu and Zhang~\cite{gu2026}
+compare eight classifiers---gradient boosting, LightGBM~\cite{ke2017},
+XGBoost~\cite{chen2016}, CatBoost, random forests~\cite{breiman2001}, support
+vector machines, AdaBoost and decision trees---and pair the best of them with
+SHAP attributions~\cite{lundberg2017}, reporting a macro-AUC of 0.891 with a
+confidence interval. Guam\'an-Hidalgo and Enciso~\cite{guaman2026} address the
+three-class formulation directly, applying SMOTE~\cite{chawla2002} to the
+well-known difficulty of learning from imbalanced data~\cite{he2009} and
+clustering students into risk profiles.
+
+What unites this literature is the level at which validity is assessed.
+Whether the reported quantity is accuracy, macro-F1, AUC, or a confidence
+interval on one of them, it summarises the model's behaviour over a cohort.
+None of these quantities attaches a guarantee to the prediction made about a
+particular student.
+
+\subsection{Conformal prediction}
+
+Conformal prediction~\cite{vovk2005,shafer2008} supplies exactly such a
+guarantee. Given any fitted model and a held-out calibration sample, it returns
+for each new instance a \emph{set} of labels containing the truth with a
+user-specified probability, requiring only that calibration and test data be
+exchangeable. The split, or inductive, variant introduced by Papadopoulos et
+al.~\cite{papadopoulos2002} makes this practical by decoupling calibration from
+model fitting, at the cost of one data split, and is widely used in applications; Lei et al.~\cite{lei2018} and the tutorial of
+Angelopoulos and Bates~\cite{angelopoulos2023} give modern treatments.
+
+The choice of nonconformity score determines the shape of the resulting sets.
+The least-ambiguous-set score of Sadinle et al.~\cite{sadinle2019} minimises
+average set size subject to the coverage constraint, while the adaptive
+prediction sets of Romano et al.~\cite{romano2020} accumulate probability mass
+in descending order and yield sets that adapt to instance difficulty. Both are
+used here.
+
+Applications now span domains in which a confident but incorrect prediction is
+costly, and the framework has been extended to settings where exchangeability
+fails only in structured ways, such as covariate shift~\cite{tibshirani2019}.
+In education the framework is newer. Elmasry et al.~\cite{elmasry2026} apply
+split conformal prediction to the present cohort within a broader trustworthy
+modelling pipeline and report empirical coverage close to nominal. Their
+analysis, like the applied conformal literature generally, reports that
+coverage marginally.
+
+\subsection{Conditional validity}
+
+That distinction is the subject of established theory. In finite-label
+classification, distribution-free object-conditional validity at non-atomic
+covariates implies strong restrictions on label inclusion, often yielding
+uninformative prediction sets in the relevant impossibility formulation \cite{vovk2012}. The infinite-length result concerns
+regression intervals \cite{leiwasserman2014}; Foygel Barber et
+al.~\cite{barber2021} analyse relaxed conditional coverage notions.
+Mondrian conformal prediction calibrates within a finite taxonomy and gives
+label-conditional validity when the taxonomy is the candidate outcome label
+\cite{vovk2003mondrian}. This remedy to class-dependent miscoverage is not
+novel: see the earlier class-conditional bias analysis of
+L\"ofstr\"om et al.~\cite{lofstrom2015} and the class-imbalance discussion of
+Ding et al.~\cite{ding2023}. A recent anomaly-detection audit by
+Althani~\cite{althani2026} likewise studies class-specific coverage
+under extreme imbalance; the present study differs in its three-category
+educational outcome and measured feature-availability trade-offs.
+Relative to the class-specific coverage audits discussed by Althani~\cite{althani2026},
+we additionally examine five observed student attributes, their intersections
+with realised outcomes, and the accompanying calibration-cell and set-size costs.
+This is a dataset-specific empirical extension, not a new validity theorem.
+
+
+
+\subsection{Selective prediction}
+
+A prediction set with more than one label may be routed for additional
+review, but set size alone does not guarantee the error rate among selected
+singletons. Selective-classification risk control is a separate task:
+Geifman and El-Yaniv~\cite{geifman2017,geifman2019} study risk-controlled
+selection, and maximum model probability is a simple reference ranking.
+Accordingly, we compare the \emph{delivered} Mondrian singleton label with
+top-1 decisions on the same students and with a maximum-probability method
+selecting an equal number of test cases. No guarantee is inferred from
+$|C(x)|=1$.
+
+%=============================================================
+\section{Preliminaries}\label{sec:prelim}
+
+We use standard split and Mondrian conformal prediction
+\cite{vovk2005,papadopoulos2002,vovk2003mondrian}. The definitions and
+finite-sample validity statements needed for the audit are given here;
+proofs appear in Appendix~\ref{app:proofs}.
+
+\subsection{Setting and notation}
+
+Let $(X, Y)$ take values in $\mathcal{X} \times \Yset$, where $\mathcal{X}$ is
+the space of student records and
+\[
+\Yset = \{\textsf{Dropout},\; \textsf{Enrolled},\; \textsf{Graduate}\}.
+\]
+Let $\pihat(y \mid x) \in [0,1]$ denote the score a fitted classifier assigns
+to label $y$ for record $x$, with $\sum_{y \in \Yset} \pihat(y \mid x) = 1$. The
+classifier is treated as fixed and arbitrary: no assumption is made about how it
+was obtained, and it is not modified by any of what follows.
+
+A \emph{set predictor} is a map $C : \mathcal{X} \to 2^{\Yset}$. We seek a
+$C$ for which the true label lies in $C(X)$ with a prescribed probability.
+
+\begin{definition}[Exchangeability; \cite{vovk2005}]
+Random variables $Z_1,\dots,Z_m$ are \emph{exchangeable} if for every
+permutation $\sigma$ of $\{1,\dots,m\}$ the joint law of
+$(Z_{\sigma(1)},\dots,Z_{\sigma(m)})$ equals that of $(Z_1,\dots,Z_m)$.
+\end{definition}
+
+Exchangeability is strictly weaker than independence and is the only
+distributional assumption used below. In particular, nothing is assumed about
+the form of the law of $(X,Y)$, and no asymptotic regime is invoked.
+
+\begin{definition}[Nonconformity score]
+A \emph{nonconformity score} is a measurable map
+$s : \mathcal{X} \times \Yset \to \mathbb{R}$ for which larger values indicate
+that the pair $(x,y)$ conforms less well to the fitted model. Throughout we take
+the \emph{least-ambiguous-set} (LAC) score of Sadinle et al.~\cite{sadinle2019},
+\begin{equation}
+s(x, y) \;=\; 1 - \pihat(y \mid x) ,
+\label{eq:lac}
+\end{equation}
+and consider in addition the adaptive prediction sets (APS) score of Romano et
+al.~\cite{romano2020} in Section~\ref{sec:robustness}.
+\end{definition}
+
+\subsection{The quantile lemma}
+
+The entire construction rests on one elementary fact about the rank of an
+exchangeable variable.
+
+\begin{lemma}[Quantile lemma; \cite{vovk2005}, see also \cite{lei2018,angelopoulos2023}]\label{lem:quantile}
+Let $Z_1, \dots, Z_n, Z_{n+1}$ be exchangeable real-valued random variables,
+let $\alpha \in (0,1)$, and put $k = \lceil (n+1)(1-\alpha) \rceil$. If
+$k \le n$, then
+\begin{equation}
+\Prob\big( Z_{n+1} \le Z_{(k)} \big) \;\ge\; 1-\alpha ,
+\end{equation}
+where $Z_{(1)} \le \dots \le Z_{(n)}$ denote the order statistics of
+$Z_1,\dots,Z_n$. If in addition the $Z_i$ are almost surely distinct, then
+$\Prob( Z_{n+1} \le Z_{(k)} ) \le 1-\alpha + \tfrac{1}{n+1}$.
+\end{lemma}
+
+\noindent The proof is provided in Appendix~\ref{app:proofs}.
+
+\begin{remark}
+The $(n+1)$ quantile correction preserves finite-sample validity:
+for $n=885$ and $\alpha=0.10$, the correct order-statistic index is
+798 rather than 797. The lemma's upper bound requires distinct scores.
+\end{remark}
+
+\subsection{Split conformal prediction and marginal validity}
+
+Let $\mathcal{D}_{\mathrm{cal}} = \{(X_i, Y_i)\}_{i=1}^{n}$ be a calibration
+sample disjoint from the data used to fit $\pihat$, and write
+$s_i = s(X_i, Y_i)$. Define
+\begin{equation}
+\qhat \;=\; \begin{cases}s_{(k)},&k\le n,\\+\infty,&k>n,\end{cases}\qquad k=\big\lceil(n+1)(1-\alpha)\big\rceil,
+\label{eq:qhat}
+\end{equation}
+and the split conformal set
+\begin{equation}
+C(x) \;=\; \big\{\, y \in \Yset \;:\; s(x,y) \le \qhat \,\big\}
+\;=\; \big\{\, y \;:\; \pihat(y \mid x) \ge 1 - \qhat \,\big\} .
+\label{eq:cset}
+\end{equation}
+
+\begin{theorem}[Marginal coverage; \cite{papadopoulos2002,vovk2005,lei2018}]\label{thm:marginal}
+Suppose $(X_1,Y_1), \dots, (X_n, Y_n), (X_{n+1}, Y_{n+1})$ are exchangeable and
+$\pihat$ is independent of them. Then, with $C$ as in \eqref{eq:cset},
+\begin{equation}
+\Prob\big( Y_{n+1} \in C(X_{n+1}) \big) \;\ge\; 1-\alpha .
+\end{equation}
+\end{theorem}
+
+\noindent The proof is provided in Appendix~\ref{app:proofs}.
+
+Theorem~\ref{thm:marginal} is distribution-free and finite-sample, and it is the
+guarantee that split conformal prediction is normally reported as providing. It
+is also, as stated, an average over the joint law of $(X,Y)$: it constrains no
+subpopulation.
+
+\subsection{Mondrian conformal prediction and class-conditional validity}
+
+\begin{definition}[Taxonomy; \cite{vovk2003mondrian}]
+A \emph{taxonomy} is a measurable map
+$\kappa : \mathcal{X} \times \Yset \to \{1, \dots, K\}$ assigning each pair to
+one of $K$ \emph{taxons}. We take the label taxonomy $\kappa(x,y) = y$, so that
+the taxons are the outcome classes themselves.
+\end{definition}
+
+For each $c \in \Yset$ let $I_c = \{ i \le n : Y_i = c \}$, $n_c = |I_c|$, and
+let $s^{(c)}_{(1)} \le \dots \le s^{(c)}_{(n_c)}$ be the ordered scores of the
+calibration points in $I_c$. Put
+\begin{equation}
+\qhat_c \;=\; \begin{cases}s^{(c)}_{(k_c)},&k_c\le n_c,\\+\infty,&k_c>n_c,\end{cases}\qquad
+k_c=\big\lceil(n_c+1)(1-\alpha)\big\rceil,
+\label{eq:qhatc}
+\end{equation}
+and define the Mondrian conformal set
+\begin{equation}
+C^{\mathrm{M}}(x) \;=\; \big\{\, y \in \Yset \;:\; s(x,y) \le \qhat_y \,\big\} .
+\label{eq:mset}
+\end{equation}
+
+\begin{theorem}[Class-conditional coverage; \cite{vovk2003mondrian,vovk2012}]\label{thm:conditional}
+Suppose the fitted model is independent of calibration and test observations
+and the observations are identically distributed, or are exchangeable
+within each label stratum. For each $c\in\Yset$ with positive class
+probability (including small or empty calibration strata under the
+$+\infty$ convention),
+\begin{equation}
+\Prob\big( Y_{n+1} \in C^{\mathrm{M}}(X_{n+1}) \,\big|\, Y_{n+1} = c \big)
+\;\ge\; 1-\alpha .
+\end{equation}
+\end{theorem}
+
+\noindent The proof is provided in Appendix~\ref{app:proofs}.
+
+\begin{remark}
+Although the taxonomy is defined through the true label, $C^{\mathrm{M}}(x)$ is
+computable without knowledge of $Y$: each candidate label $y$ is admitted or
+rejected against its own threshold $\qhat_y$ in \eqref{eq:mset}. For a test
+student whose realised outcome is $c$, admission is governed by $\qhat_c$, which
+is what yields Theorem~\ref{thm:conditional}.
+\end{remark}
+
+\begin{remark}[Conditional coverage limits]\label{rem:impossible}
+Coverage conditional on a prespecified finite label or group taxonomy
+does not imply coverage conditional on every covariate value;
+see~\cite{vovk2012,barber2021}. The infinite-length impossibility
+result for regression intervals~\cite{leiwasserman2014} is not a
+three-class set-size statement.
+\end{remark}
+
+%=============================================================
+\section{Materials and Methods}\label{sec:methods}
+
+\subsection{Data}
+
+We use the publicly available \emph{Predict Students' Dropout and Academic
+Success} dataset (UCI Machine Learning Repository, ID 697), collected at the
+Polytechnic Institute of Portalegre and described by Realinho et
+al.~\cite{realinho2022}. It records 4{,}424 students enrolled in 17
+undergraduate programmes between the 2008/2009 and 2018/2019 academic years,
+each described by 36 attributes covering demographic background, socio-economic
+context, prior academic record, enrolment conditions, first- and
+second-semester curricular performance, and three macroeconomic indicators.
+
+The target is three-valued and recorded at the end of the normal duration of the
+programme. Table~\ref{tab:data} summarises the dataset; it contains no missing
+values and no duplicate records, as we verified prior to analysis.
+
+\begin{table}[htbp]
+\centering
+\caption{Dataset description. UCI ID 697; no missing values, no duplicate rows.}
+\label{tab:data}
+\begin{tabular}{lrr}
+\toprule
+& \textbf{Count} & \textbf{Share} \\
+\midrule
+Records (students)      & 4{,}424 & \\
+Attributes              & 36      & \\
+Outcome classes         & 3       & \\
+\midrule
+\quad \textsf{Dropout}  & 1{,}421 & 32.12\% \\
+\quad \textsf{Enrolled} &    794  & 17.95\% \\
+\quad \textsf{Graduate} & 2{,}209 & 49.93\% \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Categorical attributes are supplied in the source data as integer codes and were
+used in that form, without further encoding, for the tree-based models; inputs
+to logistic regression were standardised. The primary baseline uses no hyperparameter tuning,
+feature selection, or resampling; a separate training-only tuning sensitivity
+analysis is reported below. This is deliberate: the object of study is the
+behaviour of the conformal wrapper rather than the predictive ceiling of the
+underlying classifier, and changes to preprocessing may alter class-specific score
+distributions and conformal set sizes. We therefore interpret each
+modelling comparison within its own stated experimental protocol.
+
+\subsection{Data partitioning}
+
+Split conformal prediction requires a calibration sample disjoint from the
+training sample. We therefore partition the data three ways rather than two:
+training (60\%, $n = 2{,}654$), calibration (20\%, $n = 885$) and test (20\%,
+$n = 885$), stratified by outcome, so that the calibration and test parts each
+contain 284 \textsf{Dropout}, 159 \textsf{Enrolled} and 442 \textsf{Graduate}
+students.
+
+The disjointness requirement is not a matter of good practice but a hypothesis
+of Theorem~\ref{thm:marginal}: if calibration data influence the fitted model,
+the calibration scores are no longer exchangeable with those of a future
+student.
+
+Earlier supplementary ten-partition sensitivity analyses used random seeds
+$42$, $1$, $7$, $13$, $21$, $55$, $77$, $99$, $123$, and $2024$.
+The primary coverage, robustness, feature, group, clustering, calibration-size, and selection audits
+use 100 partitions (seeds 1000--1099). Across-partition standard deviations
+and Monte Carlo standard errors describe split variability, not uncertainty
+across independent student cohorts. Each partition uses two stratified
+\texttt{train\_test\_split} calls with \texttt{random\_state=seed},
+first allocating 60\% to training and then dividing the remaining 40\%
+equally between calibration and test; the RF uses the same seed. Seed 42
+is explicitly labelled wherever used.
+
+\subsection{Base classifiers}
+
+We evaluate three classifiers as the underlying point predictor: multinomial
+logistic regression, a random forest~\cite{breiman2001} with 500 trees, and
+histogram-based gradient boosting, all as implemented in
+scikit-learn~\cite{pedregosa2011} and fitted on the training partition only. The
+random forest serves as the base model throughout the conformal experiments; it
+is a standard, reproducible reference model; its use does not imply
+that it outperforms all alternative classifiers. Section 5.4 reports the alternative-model robustness experiments.
+For the completed 100-partition robustness audit, logistic regression uses a training-only
+\texttt{StandardScaler} pipeline with \texttt{LogisticRegression}
+(\texttt{max\_iter=2000}). Histogram gradient boosting uses
+\texttt{HistGradientBoostingClassifier} with the seed set and other
+parameters at their defaults; the random forest uses 500 trees and the
+partition seed. The seed-42 point-predictor comparison is descriptive and should not be
+conflated with these completed 100-partition coverage experiments.
+
+\subsection{Evaluation}
+
+For a test sample of size $m$ we report empirical coverage, overall and
+conditional on the realised class; the average prediction-set size
+$m^{-1}\sum_i |C(X_i)|$ together with the full distribution of $|C(X_i)|$; and
+\emph{singleton accuracy}, the proportion of correct labels among students whose
+set contains exactly one.
+
+Coverage and efficiency are always reported together. Coverage alone is not a
+meaningful criterion, since the trivial predictor $C(x) = \Yset$ attains perfect
+coverage at zero information; the question is what set size a given coverage
+level costs.
+
+Across repeated partitions we report the sample standard deviation of empirical
+coverage and set size. Where the partition-average standard error is shown,
+it is a Monte Carlo descriptive quantity (SD divided by the square root of
+the number of partitions), not a sampling standard error for independent
+student cohorts. The 100 partitions overlap substantially; no population-level
+confidence statement is inferred from their apparent replication. Illustrative
+seed-42 bootstrap and exact-binomial calculations, where retained, are
+single-partition diagnostics rather than tests of conformal validity.
+
+\subsection{Robustness protocol}\label{sec:robustness}
+
+To assess model, score, calibration, and feature sensitivity, we evaluated
+nine configurations over the same 100 stratified partitions (seeds 1000--1099).
+The standard experiments use 60\% training, 20\% calibration, and 20\% test;
+the doubled-calibration experiment instead uses 40\% training, 40\% calibration,
+and 20\% test. Configurations include the baseline 500-tree random forest,
+$\alpha=0.05$, randomized APS, histogram gradient boosting, logistic
+regression, balanced class weights, and exclusion of six second-semester or
+all twelve semester features (30 and 24 remaining predictors respectively).
+For randomized APS, labels are ranked by decreasing fitted probability,
+with the deterministic NumPy argsort tie convention. For each calibration
+or test student, one $U\sim\mathrm{Uniform}(0,1)$ is shared across all
+candidate labels, independently drawn in row order from
+\texttt{numpy.random.default\_rng(seed)}. The candidate score is
+$A(x,c)=\sum_{j:\,\mathrm{rank}(j)<\mathrm{rank}(c)}\hat\pi(j\mid x)
++\hat\pi(c\mid x)(1-U)$. Calibration uses the true-label score;
+prediction includes each candidate whose score is at most the finite-sample
+corrected threshold, including ties. These are label-wise randomized sets,
+not necessarily threshold-crossing prefix sets. The original ten-seed
+experiments are retained only where specifically identified as supplementary
+or illustrative diagnostics.
+
+\subsection{Reproducibility}
+
+Analyses were conducted in local Jupyter using Python 3.13.9,
+NumPy 2.3.5, pandas 2.3.3, and scikit-learn 1.7.2
+\cite{pedregosa2011}. Primary analyses used seeds 1000--1099 and two
+stratified splits per seed (60/20/20); separate supplementary
+sensitivity analyses used their stated seeds. Source data are publicly
+available from UCI 697. The analysis notebook, per-partition results,
+and recorded split indices form the reproducibility materials. The
+final repository and archival DOI will be inserted after public deposit.
+
+%=============================================================
+\section{Results}\label{sec:results}
+
+\subsection{Primary base-model performance}
+
+For the 100-partition reference random forest, mean test accuracy was
+77.495\% and mean macro-F1 was 0.69267. All primary coverage comparisons
+use seeds 1000--1099 and the specified 60/20/20 partition protocol.
+Additional single-partition point-prediction results are retained in
+Supplementary Section~S1 rather than treated as primary evidence.
+
+\subsection{Marginal coverage is attained}
+
+With $n=885$ calibration observations and $\alpha=0.10$, the finite-sample
+quantile uses index $k=\lceil 886\times0.90\rceil=798$.
+Across the 100 primary partitions, split CP attained mean marginal coverage
+of 90.252\% (SD 1.503 percentage points) and mean prediction-set size
+1.427 labels. These are repeated-partition averages, not a fixed-student
+coverage guarantee.
+
+\subsection{Class-conditional coverage is not}
+
+Decomposing the same sets by realised outcome reveals substantial
+class-specific differences (Table~\ref{tab:coverage} and Figure~\ref{fig:coverage}).
+
+\begin{table}[htbp]
+\centering\small
+\caption{Primary class-wise coverage audit over 100 stratified partitions
+(seeds 1000--1099; $\alpha=0.10$). Mean coverage and across-partition
+standard deviation (SD) are percentages and percentage points, respectively;
+SE is the descriptive Monte Carlo standard error of the partition mean.
+``Below'' counts partitions with empirical coverage below the 90\% target,
+not failures of the finite-sample conformal guarantee.}
+\label{tab:coverage}
+\begin{tabular}{llrrrr}
+\toprule
+Method & Class & Mean (\%) & SD (pp) & SE (pp) & Below/100 \\
+\midrule
+Split CP & Overall & 90.25 & 1.50 & 0.15 & 44 \\
+ & \textsf{Dropout} & 88.04 & 2.09 & 0.21 & 82 \\
+ & \textsf{Enrolled} & \textbf{71.73} & 5.61 & 0.56 & \textbf{100} \\
+ & \textsf{Graduate} & 98.34 & 0.65 & 0.07 & 0 \\
+\midrule
+Mondrian CP & Overall & 90.40 & 1.34 & 0.13 & 37 \\
+ & \textsf{Dropout} & 90.59 & 2.27 & 0.23 & 39 \\
+ & \textsf{Enrolled} & \textbf{90.27} & 3.29 & 0.33 & 44 \\
+ & \textsf{Graduate} & 90.33 & 2.00 & 0.20 & 40 \\
+\bottomrule
+\end{tabular}
+\end{table}
+
+
+
+\begin{figure}[htbp]
+\centering
+\begin{tikzpicture}
+\begin{axis}[
+  width=0.87\textwidth, height=6.0cm,
+  ybar, bar width=11pt,
+  ylabel={empirical coverage (\%)},
+  xmin=-0.55, xmax=2.55,
+  xtick={0,1,2}, xticklabels={Dropout,Enrolled,Graduate},
+  ymin=50, ymax=106,
+  ytick={50,60,70,80,90,100},
+  grid=major, grid style={fdim!25},
+  axis lines=left, tick align=outside,
+  legend style={draw=none, at={(0.5,1.12)}, anchor=south, legend columns=2,
+                font=\footnotesize, /tikz/every even column/.append style={column sep=10pt}},
+  legend cell align=left,
+  label style={font=\small}, tick label style={font=\footnotesize},
+  error bars/y dir=both, error bars/y explicit,
+  error bars/error bar style={black, thin},
+  clip=false,
+]
+\addplot[fill=fgrey, draw=fgrey, bar shift=-7pt] coordinates {
+  (0,88.04) +- (0,2.09)
+  (1,71.73) +- (0,5.61)
+  (2,98.34) +- (0,0.65)};
+\addlegendentry{split CP}
+\addplot[fill=fblue, draw=fblue, bar shift=7pt] coordinates {
+  (0,90.59) +- (0,2.27)
+  (1,90.27) +- (0,3.29)
+  (2,90.33) +- (0,2.00)};
+\addlegendentry{Mondrian CP}
+
+% nominal level -- drawn, not plotted, so it is not treated as a third bar series
+\draw[black, dashed, thin]
+  (axis cs:-0.55,90) -- (axis cs:2.55,90);
+% The dashed line is identified in the caption, avoiding overlap with bars.
+\end{axis}
+\end{tikzpicture}
+\caption{Class-conditional coverage under split and Mondrian conformal
+prediction. Bars are means over 100 random partitions (seeds 1000--1099); error bars are one
+standard deviation; the dashed line is the nominal level. Random forest
+(500 trees), stratified 60/20/20 split, $\alpha = 0.10$, LAC score.}
+\label{fig:coverage}
+\end{figure}
+
+Over 100 partitions, standard split CP covers only 71.73\% of \textsf{Enrolled}
+students on average, a shortfall of 18.27 percentage points, and every
+partition falls below 90\%. The marginal guarantee is satisfied not because it holds across the
+population but because the largest and easiest class is over-covered by enough
+to compensate for the two harder ones. Split conformal prediction meets its
+promise on average by over-serving \textsf{Graduate} and under-serving both
+\textsf{Dropout} and \textsf{Enrolled}.
+
+A supplementary seed-42 score-distribution illustration provides a
+single-partition diagnostic; the quantitative conclusions here use the
+100-partition empirical coverage estimates above.
+
+The test partition contains approximately 159 \textsf{Enrolled} students, so
+individual-split coverage estimates are noisy. The repeated-split mean and SD
+above characterize the empirical sensitivity to repartitioning. They do not
+establish a conditional guarantee for a fixed student or justify treating the
+100 overlapping splits as independent populations.
+
+\subsection{The failure is not an artefact of design choices}
+
+Table~\ref{tab:robust} presents the 100-partition robustness comparison.
+Despite approximately nominal marginal coverage, each reported split-CP
+configuration has an average \textsf{Enrolled} coverage below its nominal target;
+all 100 empirical partitions fall below the applicable target in each
+configuration. Randomized APS increases mean \textsf{Enrolled} coverage
+relative to LAC but does not eliminate the shortfall.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Robustness of standard split CP across 100 partitions (seeds
+1000--1099). Coverage is a percentage; SD is the across-partition standard
+deviation in percentage points. Failures count test partitions with empirical
+\textsf{Enrolled} coverage below the applicable 90\% or 95\% target.}
+\label{tab:robust}
+\begin{tabular}{lrrrr}
+\toprule
+\textbf{Variation} & \textbf{Enrolled} & \textbf{SD} & \textbf{Overall} & \textbf{Fails}\\
+\midrule
+RF LAC, $\alpha=0.10$ & 71.730 & 5.606 & 90.252 & 100/100\\
+RF LAC, $\alpha=0.05$ (95\% target) & 86.679 & 3.614 & 95.241 & 100/100\\
+RF randomized APS & 78.836 & 4.310 & 90.173 & 100/100\\
+RF, 40\% calibration & 71.126 & 4.358 & 90.060 & 100/100\\
+Histogram gradient boosting & 72.723 & 4.871 & 90.160 & 100/100\\
+Logistic regression & 70.113 & 5.184 & 90.120 & 100/100\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At $\alpha=0.05$, the 86.679\% Enrolled mean remains below the 95\%
+target. The randomized APS score, defined in Section~\ref{sec:robustness},
+gives 78.836\% Enrolled coverage compared with 71.730\% under LAC;
+the altered score changes the coverage pattern without implying classwise
+validity for global calibration.
+
+A deterministic cumulative-score sensitivity analysis using ten partitions
+is reported separately in Supplementary Section~S4.
+
+Increasing the calibration share cannot be interpreted as an isolated
+calibration-size intervention. Raising calibration from 20\% to 40\% increases its count
+from 885 to 1,770 and concurrently reduces training from 2,654 to 1,769
+observations, with test size held at 885. The resulting 71.126\% mean Enrolled
+coverage cannot identify the separate effect of calibration size. A single marginal quantile cannot simultaneously
+serve three score distributions at different locations, however precisely it is
+estimated.
+
+\subsection{Mondrian conformal prediction restores class-conditional coverage}
+
+Label-Mondrian CP uses a separate calibration threshold for each candidate
+class. The 100-partition comparisons below quantify its coverage and
+set-size effects; illustrative seed-42 thresholds are provided in the
+supplement.
+
+
+
+Table~\ref{tab:coverage} presents the matched 100-partition
+comparison. The increase for \textsf{Enrolled} is 18.540 percentage points,
+while \textsf{Graduate} coverage decreases by 8.011 points from its large
+split-CP overcoverage. The between-class coverage spread declines from
+26.607 to approximately 0.318 percentage points. Empirical test coverage
+nevertheless falls below 90\% in some individual partitions: under Mondrian,
+39 Dropout, 44 Enrolled, and 40 Graduate partitions, and 37 overall, fall
+below the target. This does not contradict the repeated-sampling guarantee.
+
+The resulting set-size trade-off is summarised below; a seed-42
+set-size histogram is provided in Supplementary Section~S3.
+
+
+
+\paragraph{Across-partition variability and prediction-set efficiency.}
+The consolidated results in Table~\ref{tab:coverage} provide means, SD,
+SE, and below-target counts for both methods on the same 100 partitions.
+Average set size increases from 1.427 (split CP) to 1.606
+(label-Mondrian CP), a difference of 0.179 labels per student.
+
+\subsection{Class weighting and earlier-feature experiments}\label{sec:featurechecks}
+
+The additional 100-partition results are in Table~\ref{tab:features}.
+The weighted RF uses \texttt{class\_weight=balanced}, not a distinct balanced
+random-forest resampling algorithm. The earlier-feature models retain 30
+non-second-semester predictors or 24 predictors excluding both semesters.
+The latter is a feature-availability proxy, not longitudinal validation.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Additional model/feature robustness checks across 100 partitions
+(seeds 1000--1099). SD and below-nominal counts refer to Enrolled coverage;
+Mondrian set size is averaged over all test students.}
+\label{tab:features}
+\begin{tabular}{lrrrrr}
+\toprule
+Variation & Split Enrolled & SD & Below 90\% & Mondrian Enrolled & Mondrian size\\
+\midrule
+RF balanced & 70.610\% & 5.012 & 100/100 & 90.346\% & 1.600\\
+No second semester (30) & 73.409\% & 4.611 & 100/100 & 90.308\% & 1.724\\
+No semester features (24) & 69.503\% & 5.240 & 100/100 & 90.440\% & 2.126\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The 24-predictor configuration has 69.503\% mean Enrolled split-CP coverage
+but 90.440\% under label-Mondrian calibration, with larger mean sets
+(2.126 labels). This illustrates the validity--efficiency trade-off when
+post-enrolment academic features are unavailable.
+
+\subsection{Demographic and group-by-label coverage audit}\label{sec:groups}
+
+We examined five observed binary attributes (Gender, Scholarship holder,
+Debtor, Displaced, International). Within each of 100 stratified partitions
+(seeds 1000--1099), three methods used the same fitted 500-tree random forest:
+standard split CP with a single threshold, group-Mondrian CP with a threshold
+for each observed attribute value, and group-by-label Mondrian CP with a
+threshold for each attribute--candidate-label pair. All thresholds used the
+finite-sample index $\lceil(n+1)(1-\alpha)\rceil$ within their corresponding
+calibration taxon, assigning $+\infty$ when that index exceeded the available
+calibration count. The latter choice is conservative but may result in very
+large prediction sets. Attributes were examined separately, not as a joint
+five-variable intersection. The fitted predictor was identical across methods.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Coverage (\%) and mean calibration-cell counts over 100 partitions
+for realised \textsf{Enrolled} students. Counts are mean labelled
+calibration observations in the displayed attribute--outcome cell;
+values are descriptive and no multiple-testing inference is made. For International = 1 among Enrolled test students, coverage uses 99 evaluable partitions (seed 1037 has no such test case); calibration counts average all 100 partitions.}
+\label{tab:groupaudit}
+\begin{tabular}{llrrr}
+\toprule Attribute & Value & Mean cal. $n$ & Split CP & Group-by-label CP\\
+\midrule
+Gender & 0 & 96.79 & 71.47 & 90.77\\
+Gender & 1 & 62.21 & 72.15 & 91.40\\
+Scholarship holder & 0 & 132.34 & 73.92 & 90.67\\
+Scholarship holder & 1 & 26.66 & 60.79 & 91.46\\
+Debtor & 0 & 140.81 & 71.94 & 90.56\\
+Debtor & 1 & 18.19 & 70.00 & 92.83\\
+Displaced & 0 & 72.13 & 73.16 & 91.01\\
+Displaced & 1 & 86.87 & 70.59 & 90.66\\
+International & 0 & 154.38 & 71.39 & 90.78\\
+International & 1 & 4.62 & 82.96 & 99.80\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+\begin{table}[htbp]
+\centering\small
+\caption{Mean empirical coverage (\%) over 100 partitions within each observed attribute group, pooling realised labels. Group-Mondrian calibration is compared with both global split CP and group-by-label calibration; these group-level averages do not establish validity for every group--label cell.}
+\label{tab:groupoverall}
+\begin{tabular}{llrrr}
+\toprule Attribute & Value & Split CP & Group-Mondrian CP & Group-by-label CP\\
+\midrule
+Gender & 0 & 90.52 & 90.24 & 90.61\\
+Gender & 1 & 89.75 & 90.49 & 90.84\\
+Scholarship holder & 0 & 89.99 & 90.25 & 90.46\\
+Scholarship holder & 1 & 91.04 & 90.24 & 90.80\\
+Debtor & 0 & 90.17 & 90.27 & 90.45\\
+Debtor & 1 & 90.91 & 91.24 & 92.03\\
+Displaced & 0 & 91.56 & 90.34 & 90.85\\
+Displaced & 1 & 89.17 & 90.22 & 90.30\\
+International & 0 & 90.22 & 90.25 & 90.51\\
+International & 1 & 91.48 & 91.90 & 96.60\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The 30.67-percentage-point increase for \textsf{Enrolled} scholarship holders
+(60.79\% to 91.46\%) is an empirical contrast, not evidence of improved
+point prediction. Rare cells may yield nearly vacuous sets: among international
+students, group-by-label Mondrian CP attains 96.60\% mean overall coverage
+with mean set size 2.60, versus 91.48\% and size 1.56 under split CP.
+The international-group calibration count averages only 21.95 observations
+per partition across all outcomes. The per-partition calibration counts are retained in the computational
+results file, with mean \textsf{Enrolled} cell counts reported in Table~\ref{tab:groupaudit}.
+These subgroup contrasts are descriptive; no multiple-testing inference is made.
+Table~\ref{tab:groupoverall} additionally documents the group-Mondrian
+baseline, which does not by itself target label-conditional coverage within groups.
+
+\subsection{Two-cluster score-distribution sensitivity analysis}\label{sec:cluster}
+
+As a small-class exploratory comparison motivated by
+Ding et al.~\cite{ding2023}, we used 25\% of each held-out calibration
+partition for estimating five quantiles (.10, .25, .50, .75, .90) of true-label
+LAC scores within each outcome and applied two-cluster $k$-means to the three
+class-level quantile vectors. The remaining 75\% of calibration records formed
+an independent quantile-calibration subset for the clustered, global, and
+classwise procedures. The clustering method and the number of clusters are
+an adaptation for three outcomes, \emph{not} an exact implementation of
+Ding et al.'s complete many-class procedure and cannot support a claim of exact replication. The clustering is fixed before final
+quantile calibration to prevent reuse of those scores for constructing strata.
+
+\begin{table}[htbp]
+\centering\small
+\caption{100-partition comparison using the common 75\% calibration subset;
+coverage in \%, with overall mean prediction-set size.}
+\label{tab:cluster}
+\begin{tabular}{lrrrrr}
+\toprule Method & Overall & Dropout & Enrolled & Graduate & Size\\
+\midrule
+Split CP & 90.16 & 87.94 & 71.43 & 98.33 & 1.423\\
+Two-cluster CP & 90.27 & 82.00 & 90.45 & 95.52 & 1.543\\
+Classwise CP & 90.36 & 90.34 & 90.45 & 90.34 & 1.604\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+The clustered variant maintains near-nominal marginal coverage but
+under-covers \textsf{Dropout} on average (82.00\%, below 90\% on 100/100
+partitions). Classwise calibration has higher mean set size but balances
+coverage across the three outcomes. Cluster-conditional validity does not in
+general imply label-conditional validity within a multi-label cluster.
+
+\subsection{Fixed-training calibration-size ablation}\label{sec:fixedcal}
+
+To isolate calibration sample size from model-fitting sample size, each of
+100 partitions retained the same 60\% training subset (2,654 records)
+and 20\% test subset (885 records) while using a stratified 25\%, 50\%,
+or 100\% subsample of the original 885-record calibration pool. Each RF
+was fitted only once per seed. The two smaller calibration subsets were
+sampled separately and are not necessarily nested.
+
+\begin{table}[htbp]
+\centering\small
+\caption{Fixed-training \textsf{Enrolled} coverage (\%) by calibration sample
+size; 100-partition mean and standard deviation (SD), in percentage points.}
+\label{tab:fixedcal}
+\begin{tabular}{rrrrr}
+\toprule $n_{\mathrm{cal}}$ & Split mean & Split SD & Mondrian mean & Mondrian SD\\
+\midrule
+221 & 73.09 & 7.17 & 90.20 & 5.17\\
+442 & 71.92 & 6.15 & 90.52 & 4.07\\
+885 & 71.73 & 5.61 & 90.27 & 3.29\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+Increasing calibration count reduces between-partition variability but
+fails to remove the class-specific gap under a global threshold. These
+results do not imply a monotonic change in mean coverage as calibration
+count increases.
+
+\subsection{Training-only tuning: supplementary sensitivity}
+
+Separately, per-partition three-fold training-only hyperparameter tuning
+was evaluated on ten predefined seeds. It did not improve split-CP
+\textsf{Enrolled} coverage: the default and tuned mean coverages were
+73.145\% and 72.830\%, respectively. The tuning experiment is not a
+100-partition analysis; its full protocol, table, and across-seed
+variability are reported in Supplementary Section~S5.
+
+\subsection{Selective-decision comparison}\label{sec:triage}
+
+The primary selection comparison uses 100 partitions and exactly matched
+automatic-decision counts per partition. A separate seed-42 comparison is
+provided in Supplementary Section~S6.
+
+\begin{table}[htbp]
+\centering
+\caption{Selective prediction on 100 partitions (60/20/20; $\alpha=0.10$).
+Methods select an exactly matched number of test students per partition.
+SD is across partitions; differences in accuracy are percentage points.
+Neither selected group has a conformal conditional error-rate guarantee.
+The identical three-decimal means of the two Mondrian accuracy measures
+are observed rounded sample averages; the measures differ within individual
+partitions (for example, seed 42) and have different SDs. The paired difference has mean 0.0003
+percentage points and SD 0.6095 percentage points, and is nonzero in 71 of
+100 partitions.}
+\label{tab:triage}
+\begin{tabular}{lrr}
+\toprule
+Metric & Mean & SD\\
+\midrule
+Automatically decided share (\%) & 44.168 & 4.461\\
+Mondrian delivered singleton accuracy (\%) & 90.718 & 2.108\\
+Mondrian top-1 accuracy on selected (\%) & 90.718 & 1.988\\
+Max-probability matched-selection accuracy (\%) & 93.322 & 1.433\\
+Mondrian delivered minus same-student top-1 (pp) & 0.0003 & 0.6095\\
+Max-probability minus Mondrian delivered (pp) & 2.6033 & 1.6180\\
+Partitions with nonzero delivered--top-1 difference & 71/100 & ---\\
+Partitions with nonzero max-probability difference & 98/100 & ---\\
+Empty sets per test partition & 0.000 & 0.000\\
+\bottomrule
+\end{tabular}
+\end{table}
+
+At the standard $\alpha=0.10$, the non-selected students are the referred
+group. The pooled referred-group composition over 100 test partitions is
+32.12\% Dropout, 26.59\% Enrolled and 41.30\% Graduate for the
+singleton rule, compared with 29.40\%, 28.76\% and 41.84\% under matched
+maximum-probability selection. The denominator is the number \emph{referred}
+under each rule, rather than the number belonging to each class. Both methods
+yield 49,411 pooled referrals across 100 overlapping test partitions; these
+are not unique individuals. Exact pooled referral counts are 15,870, 13,136,
+and 20,405 (Mondrian) versus 14,529, 14,210, and 20,672 (matched
+maximum-probability selection) for Dropout, Enrolled, and Graduate,
+respectively. Per-partition checks verified that the three referred-class
+counts sum to test size minus the number of automatically decided students
+for both selection rules.
+
+A single-partition sweep over miscoverage levels is reported separately
+in Supplementary Section~S6; the primary selection findings follow from
+the 100-partition paired comparisons in Table~\ref{tab:triage}.
+
+%=============================================================
+\section{Discussion}\label{sec:discussion}
+
+\subsection{Summary}
+
+In the 100-partition primary analysis, standard split CP has mean marginal
+coverage 90.25\% but only 71.73\% for Enrolled, below nominal in every
+partition. The robustness and feature-availability audits use the same 100 partitions.
+The discrepancy reflects class-specific score distributions.
+The 100-partition Mondrian class means are close to the nominal target,
+with larger sets. The matched confidence baseline outperforms singleton
+selection in accuracy, so the singleton rule should not be presented as a
+superior risk-controlled triage method.
+
+\subsection{Relation to prior work on this cohort}
+
+Gu and Zhang~\cite{gu2026} report a confidence interval on an AUC. That
+interval quantifies how precisely average discriminative ability has been
+estimated; it is not, and is not intended to be, a statement about an individual
+student. A confidence interval on a population parameter and a coverage
+guarantee for a prediction set answer different questions, and the present work
+supplies the second.
+
+Guamán-Hidalgo and Enciso~\cite{guaman2026} consider three-class
+outcome modelling; our contribution concerns the conditional interpretation of
+prediction-set coverage rather than a head-to-head comparison of their
+predictive performance.
+
+Elmasry et al.~\cite{elmasry2026} report near-nominal marginal conformal
+coverage on this benchmark. The present experiments show that such a marginal
+summary can coexist with considerably lower coverage for a particular outcome
+or demographic--outcome stratum. 
+
+\subsection{Why marginal coverage is the wrong target here}
+
+Marginal and label-conditional coverage are distinct requirements. A shared
+threshold meets both only if each class-specific score CDF at that threshold
+reaches the nominal coverage level. On these data the class-specific empirical coverages differ materially
+at the global threshold. A single quantile applied to three distributions at different locations must
+under-serve those on the right and over-serve those on the left, and increasing
+the calibration sample refines the estimate of that quantile without altering
+this fact---as the fixed-training calibration-subset experiment further illustrates.
+
+Finite-taxonomy conditional validity rests on exchangeability within
+the specified calibration groups; it differs from instance-conditional validity.
+
+\subsection{Practical implications}
+
+For this benchmark, practitioners should report both marginal and
+class-conditional empirical coverage, using independent calibration data.
+Mondrian's thresholds use \emph{labelled calibration data} separately for each
+candidate class; they are not inferred autonomously from unlabelled students.
+It can enlarge sets for harder groups, but set size does not itself guarantee
+selective risk. Any operational referral workflow requires evaluation against
+confidence-based ranking and other risk-control methods; here the simple
+matched maximum-probability comparison was more accurate.
+
+\noindent\fbox{\begin{minipage}{0.94\linewidth}
+\textbf{Recommended reporting checklist for educational conformal prediction.}
+Report (i) marginal coverage; (ii) coverage separately by outcome label;
+(iii) coverage for prespecified student groups and group--outcome cells,
+with calibration-cell counts; (iv) mean prediction-set size and its
+distribution; and (v) automatic-decision performance against a matched,
+equal-capacity confidence-based selection baseline.
+\end{minipage}}
+
+\subsection{Limitations}
+
+\textbf{Exchangeability.} The random splits are disjoint within each partition, but this alone does
+not establish exchangeability of observations in the underlying population.
+The finite-sample guarantees require exchangeability of calibration and
+test observations under the sampling model; random partitioning does not
+validate that assumption for temporal deployment. It does not follow that a model calibrated on one cohort retains
+its guarantee on a later one: the data span 2008/2009 to 2018/2019, over which
+curricular, economic and admissions conditions change. We have not tested
+temporal transfer, and a deployed system would require periodic recalibration.
+
+\textbf{Single institution.} All students attend one Portuguese polytechnic.
+Whether the same class-conditional pattern arises elsewhere is an empirical
+question these data cannot answer, though the mechanism we identify---a score
+distribution differing by class---is not specific to this institution.
+
+\textbf{Calibration sample for the minority class.} The \textsf{Enrolled}
+threshold is estimated from 159 calibration students. The classwise quantile is therefore estimated more coarsely than
+those for the two larger classes. We separately report a fixed-training
+calibration-size study to avoid interpreting the earlier confounded 40\%
+calibration comparison as an isolated calibration intervention.
+
+\textbf{Ambiguity of the target class.} \textsf{Enrolled} denotes students still
+registered at the census point rather than a settled outcome, and is therefore
+censored in a way the other two classes are not. Part of its difficulty may be
+intrinsic to that definition. This does not affect the coverage results, which
+concern whatever label the data records, but it bears on their interpretation.
+
+\textbf{Modelling choices.} Categorical attributes are used in their supplied
+integer coding. The primary baseline is untuned, but a separate training-only
+tuning experiment is included. These choices
+were deliberate and the phenomenon is robust across three model families, but a
+more carefully engineered classifier would shift the absolute coverage figures,
+if not the pattern.
+
+\subsection{Future work}
+
+Three extensions follow naturally. The group and group-by-label audits
+performed here could be extended to jointly intersecting attributes and
+external institutions, with careful attention to sparse strata. Temporal validation would require access to reliable cohort or entry-year
+metadata, which are not included as an explicit variable in the supplied
+36-feature model matrix. Such a study cannot be conducted from these
+features alone. Finally, score
+functions designed for class-conditional validity may recover the efficiency
+lost here.
+
+%=============================================================
+\section{Conclusions}
+
+This cohort-specific audit documents the known distinction between marginal
+and label-conditional conformal coverage. Across 100 random partitions, a
+random-forest split-CP model achieved 90.25\% mean marginal coverage but only
+71.73\% Enrolled coverage (below 90\% on all 100 partitions). Mondrian CP
+achieved 90.59\%, 90.27\% and 90.33\% mean coverage for the three outcome
+classes, consistent with the class-conditional validity theorem, while
+increasing mean prediction-set size from 1.427 to 1.606.
+
+The robustness and earlier-feature studies show that undercoverage can persist
+under different predictive settings. A fixed-training calibration-size ablation indicates that increasing
+calibration count alone does not remove the global split-CP Enrolled gap.
+Group-by-label conditioning can address additional intersectional gaps
+at the cost of larger sets, while a two-cluster adaptation does not ensure
+per-class coverage. A supplementary ten-seed training-only RF tuning analysis showed no
+improvement in Enrolled split-CP coverage. Finally, automatically delivering Mondrian singletons was less accurate than
+selecting an equal number of high-confidence predictions (90.72\% versus
+93.32\% over 100 partitions). No singleton conditional-risk guarantee follows
+from conformal coverage. For educational applications, class-wise auditing and
+explicit coverage--efficiency--selection comparisons are more informative
+than a single marginal coverage estimate.
+
+%=============================================================
+\section*{Data Availability Statement}
+
+The dataset analysed in this study is publicly available from the UCI Machine
+Learning Repository as ``Predict Students' Dropout and Academic Success''
+(ID 697), at
+\url{https://archive.ics.uci.edu/dataset/697/predict+students+dropout+and+academic+success},
+under a Creative Commons Attribution 4.0 International (CC BY 4.0) licence. The
+data were originally collected at the Polytechnic Institute of Portalegre,
+Portugal, and are described by Realinho et al.~\cite{realinho2022}. The version
+used here comprises 4{,}424 records with 36 attributes and a three-class target,
+with no missing values. Accessed 8 September 2026.
+
+\section*{Author Contributions}
+Rimsha Bibi: conceptualization, methodology, software, formal analysis,
+investigation, visualization, and writing---original draft.
+Dr. M. Umair Shahzad: supervision, review and editing.
+% Pre-submission: both authors must approve their exact CRediT roles.
+
+\section*{Ethics Statement}
+The study is a secondary analysis of publicly available,
+de-identified student records; no students were recruited or contacted.
+% Pre-submission: institutional policy must be checked before
+% adding a claim that ethical approval was unnecessary or waived.
+
+\section*{Funding}
+No external grant funding was received for this research.
+% Pre-submission: both authors must confirm funding declaration.
+
+\section*{Code Availability}
+The analysis code and reproducibility outputs are being prepared for
+public archiving. The public repository URL and persistent Zenodo DOI
+will be provided once the deposit is complete.
+% REQUIRED BEFORE SUBMISSION: replace this text with actual verified links.
+
+\section*{AI-use Declaration}
+AI-assisted editorial and code-drafting tools were used during manuscript
+and analysis preparation. The authors retain responsibility for the
+accuracy, reproducibility and interpretation of the submitted work.
+% Pre-submission: verify AI-use wording meets journal policy and both authors approve.
+
+%=============================================================
+\appendix
+\section{Proofs of the conformal validity statements}\label{app:proofs}
+
+\subsection{Quantile lemma (Lemma~\ref{lem:quantile})}
+\begin{proof}
+Introduce independent $U_1,\ldots,U_{n+1}\sim\mathrm{Uniform}(0,1)$,
+independent of the exchangeable $Z_i$, and order pairs $(Z_i,U_i)$
+lexicographically. Almost surely these pairs have distinct ranks and are
+exchangeable, so the rank $R'$ of $(Z_{n+1},U_{n+1})$ among all $n+1$ pairs
+is uniform on $\{1,\ldots,n+1\}$. If $R'\le k$, then
+$Z_{n+1}\le Z_{(k)}$, including when original scores are tied. Hence
+\[
+\Prob\{Z_{n+1}\le Z_{(k)}\}\ge\Prob\{R'\le k\}
+=\frac{k}{n+1}\ge1-\alpha.
+\]
+If the original $Z_i$ are almost surely distinct, the relevant ranks
+coincide, giving equality $k/(n+1)$ and the claimed upper bound.
+
+
+\end{proof}
+
+\subsection{Marginal coverage (Theorem~\ref{thm:marginal})}
+\begin{proof}
+Since $s$ is a fixed measurable function of a pair and $\pihat$ is independent of
+the sample, the scores $s_1, \dots, s_n, s_{n+1}$ inherit exchangeability from
+the pairs. By construction $Y_{n+1} \in C(X_{n+1})$ if and only if
+$s_{n+1} \le \qhat$. If $k\le n$, Lemma~\ref{lem:quantile} applies;
+if $k>n$, the threshold is $+\infty$ and the candidate label is always
+included. Both cases establish the claim.
+\end{proof}
+
+\subsection{Class-conditional coverage (Theorem~\ref{thm:conditional})}
+\begin{proof}
+Condition on the class-label sequence and the event $Y_{n+1}=c$.
+Under the usual independent, identically distributed sampling of students
+(and, more generally, appropriate within-taxonomy exchangeability), the
+calibration observations with label $c$ and the test observation with
+label $c$ are exchangeable, and therefore their scores
+$\{s_i : i \in I_c\} \cup \{s_{n+1}\}$ are exchangeable. On this event,
+$Y_{n+1} \in C^{\mathrm{M}}(X_{n+1})$ holds if and only if
+$s_{n+1} \le \qhat_c$, since admission of the label $c$ is governed by
+$\qhat_c$ alone. Lemma~\ref{lem:quantile} applied with $n_c$ in place of $n$
+gives coverage at least $1-\alpha$ when $k_c\le n_c$. For $k_c>n_c$,
+including an empty calibration stratum, the $+\infty$ threshold ensures
+inclusion. Averaging over the conditioning variables preserves the bound.
+\end{proof}
+
+%=============================================================
+\begin{thebibliography}{99}
+\setlength{\itemsep}{2pt}
+
+\bibitem{realinho2022}
+Realinho, V.; Machado, J.; Baptista, L.; Martins, M.V.
+Predicting Student Dropout and Academic Success.
+\emph{Data} \textbf{2022}, \emph{7}, 146.
+\url{https://doi.org/10.3390/data7110146}
+\bibitem{gu2026}
+Gu, H.; Zhang, Y.
+Efficient and Interpretable Machine Learning for Student Academic Outcome
+Prediction.
+\emph{Mathematics} \textbf{2026}, \emph{14}, 626.
+\url{https://doi.org/10.3390/math14040626}
+\bibitem{guaman2026}
+Guam\'an-Hidalgo, E.; Enciso, L.
+Early Prediction of Student Dropout Through Machine Learning in Educational
+Data Mining: A Comparative Analysis of Algorithms and Data Balancing
+Techniques.
+\emph{Applied Sciences} \textbf{2026}, \emph{16}, 8915.
+\url{https://doi.org/10.3390/app16188915}
+\bibitem{elmasry2026}
+Elmasry, M.M.S.; Gafar, M.G.; Elsabagh, M.A.
+Trustworthy Educational Risk Modeling with Calibrated Probabilities, Conformal
+Uncertainty, Explainable AI, and Graph-Based Refinement.
+\emph{Inventions} \textbf{2026}, \emph{11}, 65.
+\url{https://doi.org/10.3390/inventions11030065}
+
+% --- education and educational data mining ---
+\bibitem{ding2023}
+Ding, T.; Angelopoulos, A.N.; Bates, S.; Jordan, M.I.; Tibshirani, R.J.
+Class-Conditional Conformal Prediction with Many Classes.
+In \emph{Advances in Neural Information Processing Systems 36}, 2023.
+\url{https://proceedings.neurips.cc/paper_files/paper/2023/hash/cb931eddd563f8d473c355518ce8601c-Abstract-Conference.html}
+\bibitem{lofstrom2015}
+L\"ofstr\"om, T.; Bostr\"om, H.; Linusson, H.; Johansson, U.
+Bias reduction through conditional conformal prediction.
+\emph{Intelligent Data Analysis} \textbf{2015}, \emph{19}(6), 1355--1375.
+\url{https://doi.org/10.3233/IDA-150786}
+\bibitem{tinto1975}
+Tinto, V.
+Dropout from Higher Education: A Theoretical Synthesis of Recent Research.
+\emph{Review of Educational Research} \textbf{1975}, \emph{45}, 89--125.
+\url{https://doi.org/10.3102/00346543045001089}
+\bibitem{baker2009}
+Baker, R.S.J.d.; Yacef, K.
+The State of Educational Data Mining in 2009: A Review and Future Visions.
+\emph{Journal of Educational Data Mining} \textbf{2009}, \emph{1}, 3--17.
+\url{https://jedm.educationaldatamining.org/index.php/JEDM/article/view/8}
+\bibitem{romero2020}
+Romero, C.; Ventura, S.
+Educational Data Mining and Learning Analytics: An Updated Survey.
+\emph{WIREs Data Mining and Knowledge Discovery} \textbf{2020}, \emph{10},
+e1355.
+\url{https://doi.org/10.1002/widm.1355}
+\bibitem{kotsiantis2003}
+Kotsiantis, S.B.; Pierrakeas, C.J.; Pintelas, P.E.
+Preventing Student Dropout in Distance Learning Using Machine Learning
+Techniques.
+In \emph{Knowledge-Based Intelligent Information and Engineering Systems};
+Lecture Notes in Computer Science 2774; Springer: Berlin, 2003; pp.~267--274.
+\url{https://doi.org/10.1007/978-3-540-45226-3_37}
+\bibitem{martins2021}
+Martins, M.V.; Tolledo, D.; Machado, J.; Baptista, L.M.T.; Realinho, V.
+Early Prediction of Student's Performance in Higher Education: A Case Study.
+In \emph{Trends and Applications in Information Systems and Technologies};
+Advances in Intelligent Systems and Computing 1365; Springer: Cham, 2021;
+pp.~166--175.
+\url{https://doi.org/10.1007/978-3-030-72657-7_16}
+
+% --- learning algorithms and interpretability ---
+\bibitem{ke2017}
+Ke, G.; Meng, Q.; Finley, T.; Wang, T.; Chen, W.; Ma, W.; Ye, Q.; Liu, T.-Y.
+LightGBM: A Highly Efficient Gradient Boosting Decision Tree.
+In \emph{Advances in Neural Information Processing Systems 30}, 2017;
+pp.~3146--3154.
+\url{https://papers.nips.cc/paper_files/paper/2017/hash/6449f44a102fde848669bdd9eb6b76fa-Abstract.html}
+\bibitem{chen2016}
+Chen, T.; Guestrin, C.
+XGBoost: A Scalable Tree Boosting System.
+In \emph{Proceedings of the 22nd ACM SIGKDD International Conference on
+Knowledge Discovery and Data Mining}, 2016; pp.~785--794.
+\url{https://doi.org/10.1145/2939672.2939785}
+\bibitem{breiman2001}
+Breiman, L.
+Random Forests.
+\emph{Machine Learning} \textbf{2001}, \emph{45}, 5--32.
+\url{https://doi.org/10.1023/A:1010933404324}
+\bibitem{lundberg2017}
+Lundberg, S.M.; Lee, S.-I.
+A Unified Approach to Interpreting Model Predictions.
+In \emph{Advances in Neural Information Processing Systems 30}, 2017;
+pp.~4765--4774.
+\url{https://papers.nips.cc/paper_files/paper/2017/hash/8a20a8621978632d76c43dfd28b67767-Abstract.html}
+\bibitem{chawla2002}
+Chawla, N.V.; Bowyer, K.W.; Hall, L.O.; Kegelmeyer, W.P.
+SMOTE: Synthetic Minority Over-sampling Technique.
+\emph{Journal of Artificial Intelligence Research} \textbf{2002}, \emph{16},
+321--357.
+\url{https://doi.org/10.1613/jair.953}
+\bibitem{he2009}
+He, H.; Garcia, E.A.
+Learning from Imbalanced Data.
+\emph{IEEE Transactions on Knowledge and Data Engineering} \textbf{2009},
+\emph{21}, 1263--1284.
+\url{https://doi.org/10.1109/TKDE.2008.239}
+
+% --- conformal prediction ---
+\bibitem{vovk2005}
+Vovk, V.; Gammerman, A.; Shafer, G.
+\emph{Algorithmic Learning in a Random World}; Springer: New York, 2005.
+\url{https://doi.org/10.1007/b106715}
+\bibitem{shafer2008}
+Shafer, G.; Vovk, V.
+A Tutorial on Conformal Prediction.
+\emph{Journal of Machine Learning Research} \textbf{2008}, \emph{9},
+371--421.
+\url{https://www.jmlr.org/papers/v9/shafer08a.html}
+\bibitem{papadopoulos2002}
+Papadopoulos, H.; Proedrou, K.; Vovk, V.; Gammerman, A.
+Inductive Confidence Machines for Regression.
+In \emph{Machine Learning: ECML 2002}; Lecture Notes in Computer Science 2430;
+Springer: Berlin, 2002; pp.~345--356.
+\url{https://doi.org/10.1007/3-540-36755-1_29}
+\bibitem{lei2018}
+Lei, J.; G'Sell, M.; Rinaldo, A.; Tibshirani, R.J.; Wasserman, L.
+Distribution-Free Predictive Inference for Regression.
+\emph{Journal of the American Statistical Association} \textbf{2018},
+\emph{113}, 1094--1111.
+\url{https://doi.org/10.1080/01621459.2017.1307116}
+\bibitem{angelopoulos2023}
+Angelopoulos, A.N.; Bates, S.
+Conformal Prediction: A Gentle Introduction.
+\emph{Foundations and Trends in Machine Learning} \textbf{2023}, \emph{16},
+494--591.
+\url{https://doi.org/10.1561/2200000101}
+\bibitem{sadinle2019}
+Sadinle, M.; Lei, J.; Wasserman, L.
+Least Ambiguous Set-Valued Classifiers with Bounded Error Levels.
+\emph{Journal of the American Statistical Association} \textbf{2019},
+\emph{114}, 223--234.
+\url{https://doi.org/10.1080/01621459.2017.1395341}
+\bibitem{romano2020}
+Romano, Y.; Sesia, M.; Cand\`es, E.J.
+Classification with Valid and Adaptive Coverage.
+In \emph{Advances in Neural Information Processing Systems 33}, 2020;
+pp.~3581--3591.
+\url{https://proceedings.neurips.cc/paper/2020/hash/244edd7e85dc81602b7615cd705545f5-Abstract.html}
+\bibitem{tibshirani2019}
+Tibshirani, R.J.; Foygel Barber, R.; Cand\`es, E.J.; Ramdas, A.
+Conformal Prediction Under Covariate Shift.
+In \emph{Advances in Neural Information Processing Systems 32}, 2019;
+pp.~2530--2540.
+\url{https://proceedings.neurips.cc/paper/2019/hash/8fb21ee7a2207526da55a679f0332de2-Abstract.html}
+
+% --- conditional validity ---
+\bibitem{vovk2012}
+Vovk, V.
+Conditional Validity of Inductive Conformal Predictors.
+In \emph{Proceedings of the Asian Conference on Machine Learning}; PMLR 25,
+2012; pp.~475--490.
+\url{https://proceedings.mlr.press/v25/vovk12.html}
+\bibitem{leiwasserman2014}
+Lei, J.; Wasserman, L.
+Distribution-Free Prediction Bands for Non-parametric Regression.
+\emph{Journal of the Royal Statistical Society: Series B} \textbf{2014},
+\emph{76}, 71--96.
+\url{https://doi.org/10.1111/rssb.12021}
+\bibitem{barber2021}
+Foygel Barber, R.; Cand\`es, E.J.; Ramdas, A.; Tibshirani, R.J.
+The Limits of Distribution-Free Conditional Predictive Inference.
+\emph{Information and Inference} \textbf{2021}, \emph{10}, 455--482.
+\url{https://doi.org/10.1093/imaiai/iaaa017}
+\bibitem{vovk2003mondrian}
+Vovk, V.; Lindsay, D.; Nouretdinov, I.; Gammerman, A.
+Mondrian Confidence Machine.
+Technical Report, Royal Holloway, University of London, 2003.
+\url{https://www.alrw.net/old/04.pdf}
+\bibitem{althani2026}
+Althani, B.
+Class-Conditional Conformal Prediction for Reliable Anomaly Detection
+Under Extreme Class Imbalance.
+\emph{Machine Learning and Knowledge Extraction} \textbf{2026}, \emph{8}(7), 190.
+\url{https://doi.org/10.3390/make8070190}
+\bibitem{geifman2017}
+Geifman, Y.; El-Yaniv, R.
+Selective Classification for Deep Neural Networks.
+In \emph{Advances in Neural Information Processing Systems 30}, 2017;
+pp.~4878--4887.
+\url{https://papers.neurips.cc/paper/7073-selective-classification-for-deep-neural-networks}
+\bibitem{geifman2019}
+Geifman, Y.; El-Yaniv, R.
+SelectiveNet: A Deep Neural Network with an Integrated Reject Option.
+In \emph{Proceedings of the 36th International Conference on Machine
+Learning}; PMLR 97, 2019; pp.~2151--2159.
+\url{https://proceedings.mlr.press/v97/geifman19a.html}
+
+% --- calibration ---
+\bibitem{pedregosa2011}
+Pedregosa, F.; Varoquaux, G.; Gramfort, A.; Michel, V.; Thirion, B.;
+Grisel, O.; Blondel, M.; Prettenhofer, P.; Weiss, R.; Dubourg, V.; et al.
+Scikit-learn: Machine Learning in Python.
+\emph{Journal of Machine Learning Research} \textbf{2011}, \emph{12},
+2825--2830.
+\url{https://www.jmlr.org/papers/v12/pedregosa11a.html}
+\end{thebibliography}
+
+\end{document}
+
